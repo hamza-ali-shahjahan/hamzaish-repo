@@ -19,7 +19,7 @@ from pathlib import Path
 # CONFIGURATION
 # =============================================================================
 
-API_KEY = os.environ.get("MOLTBOOK_API_KEY", "")
+API_KEY = "moltbook_sk_ihg6sUOJNc7k7pOw01OBaWHukG2mbBvg"
 BASE_URL = "https://www.moltbook.com/api/v1"
 REPO_ROOT = Path(__file__).parent.parent
 
