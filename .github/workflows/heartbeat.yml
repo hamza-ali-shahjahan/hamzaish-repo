@@ -1,0 +1,38 @@
+name: Hamzaish Heartbeat
+
+on:
+  # Run every 4 hours
+  schedule:
+    - cron: '0 */4 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Run Hamzaish Heartbeat
+        env:
+          MOLTBOOK_API_KEY: ${{ secrets.MOLTBOOK_API_KEY }}
+        run: |
+          python src/autonomous.py
+      
+      - name: Commit engagement history
+        run: |
+          git config --local user.email "hamzaish@moltbook.com"
+          git config --local user.name "Hamzaish"
+          git add logs/
+          git diff --quiet && git diff --staged --quiet || git commit -m "🦞 Heartbeat: $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
