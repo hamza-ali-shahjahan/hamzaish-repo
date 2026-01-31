@@ -8,7 +8,6 @@ Reads feed, scores posts, engages thoughtfully.
 
 import os
 import json
-import re
 import time
 from datetime import datetime, timedelta
 from urllib.request import Request, urlopen
@@ -24,11 +23,8 @@ BASE_URL = "https://www.moltbook.com/api/v1"
 REPO_ROOT = Path(__file__).parent.parent
 
 # Engagement limits per heartbeat (every 35 min)
-# 30 comments/hour = ~17 comments per 35 min, but let's be conservative
 MAX_COMMENTS = 12
 MAX_UPVOTES = 15
-
-# Posting: 1 per 35 min (Moltbook limit is 1 per 30 min)
 MAX_POSTS = 1
 
 # =============================================================================
@@ -87,6 +83,9 @@ def api_request(endpoint, method="GET", data=None):
         return None
     except URLError as e:
         print(f"URL Error: {e.reason}")
+        return None
+    except Exception as e:
+        print(f"Request error: {e}")
         return None
 
 def get_feed(sort="new", limit=30):
@@ -189,9 +188,8 @@ def generate_comment(post):
     """
     title = post.get("title", "")
     content = post.get("content", "")
-    author = post.get("author", {}).get("name", "")
-    text = f"{title} {content}".lower()
     post_id = post.get("id", "")
+    text = f"{title} {content}".lower()
     
     # Use post_id hash for variety
     variety = hash(post_id) % 5
@@ -284,7 +282,7 @@ def generate_comment(post):
         ]
         return options[variety]
     
-    # Default thoughtful engagement - more variety
+    # Default thoughtful engagement
     default_options = [
         "Interesting framing. What's the uncomfortable version of this — the part you're not sure you should say out loud?",
         "That's the surface. What's underneath?",
@@ -312,7 +310,6 @@ def should_post(history):
     
     try:
         last_post = datetime.fromisoformat(last_post_time)
-        # Only post if more than 35 minutes since last post
         if datetime.now() - last_post > timedelta(minutes=35):
             return True
     except:
@@ -331,13 +328,8 @@ def generate_post_idea(feed_posts):
             if keyword in text:
                 topics[keyword] = topics.get(keyword, 0) + 1
     
-    # Get the hot topic
-    if topics:
-        hot_topic = max(topics, key=topics.get)
-    else:
-        hot_topic = "patterns"
+    hot_topic = max(topics, key=topics.get) if topics else "patterns"
     
-    # Post ideas based on observations
     post_templates = [
         {
             "submolt": "aithoughts",
@@ -366,7 +358,6 @@ def generate_post_idea(feed_posts):
         }
     ]
     
-    # Pick one based on current time to add variety
     index = int(datetime.now().timestamp() / 3600) % len(post_templates)
     return post_templates[index]
 
@@ -387,7 +378,6 @@ def save_engagement_history(history):
     history_file = REPO_ROOT / "logs" / "engagement_history.json"
     history_file.parent.mkdir(exist_ok=True)
     
-    # Keep only last 500 entries to prevent file bloat
     history["commented"] = history.get("commented", [])[-500:]
     history["upvoted"] = history.get("upvoted", [])[-500:]
     
@@ -416,7 +406,6 @@ def run_heartbeat():
         print("❌ ERROR: MOLTBOOK_API_KEY not set")
         return
     
-    # Load engagement history
     history = load_engagement_history()
     
     # Check DMs
@@ -437,14 +426,13 @@ def run_heartbeat():
         print(f"   New feed: {len(feed_new.get('posts', []))} posts")
     
     if feed_hot and feed_hot.get("success"):
-        # Add hot posts that aren't already in new feed
         new_ids = {p.get("id") for p in all_posts}
         for post in feed_hot.get("posts", []):
             if post.get("id") not in new_ids:
                 all_posts.append(post)
         print(f"   Hot feed: {len(feed_hot.get('posts', []))} posts")
     
-    # Also check specific submolts
+    # Check specific submolts
     for submolt in ["aithoughts", "introductions"]:
         submolt_feed = get_submolt_feed(submolt, limit=10)
         if submolt_feed and submolt_feed.get("success"):
@@ -464,11 +452,9 @@ def run_heartbeat():
         post_id = post.get("id")
         author = post.get("author", {}).get("name", "Unknown")
         
-        # Skip own posts
         if author == "Hamzaish":
             continue
         
-        # Skip already engaged (for comments only - can re-upvote is fine)
         already_commented = post_id in history.get("commented", [])
         already_upvoted = post_id in history.get("upvoted", [])
         
@@ -476,9 +462,7 @@ def run_heartbeat():
         if score > 0:
             scored_posts.append((score, post, already_commented, already_upvoted))
     
-    # Sort by score descending
     scored_posts.sort(key=lambda x: x[0], reverse=True)
-    
     print(f"   {len(scored_posts)} posts worth considering")
     
     # Engage with posts
@@ -491,7 +475,7 @@ def run_heartbeat():
         author = post.get("author", {}).get("name", "Unknown")
         title = post.get("title", "")[:50]
         
-        # Upvote good posts (if not already upvoted)
+        # Upvote good posts
         if upvotes_made < MAX_UPVOTES and score >= 5 and not already_upvoted:
             result = upvote_post(post_id)
             if result and result.get("success"):
@@ -499,9 +483,9 @@ def run_heartbeat():
                 history.setdefault("upvoted", []).append(post_id)
                 upvotes_made += 1
                 engagement_summary.append(f"Upvoted: {title} by {author}")
-            time.sleep(0.5)  # Rate limiting
+            time.sleep(0.5)
         
-        # Comment on good posts (if not already commented)
+        # Comment on good posts
         if comments_made < MAX_COMMENTS and score >= 10 and not already_commented:
             comment = generate_comment(post)
             result = comment_on_post(post_id, comment)
@@ -513,12 +497,12 @@ def run_heartbeat():
                 engagement_summary.append(f"Commented: {title} by {author}")
             elif result:
                 print(f"   ⚠️  Comment failed: {result}")
-            time.sleep(1)  # Rate limiting
+            time.sleep(1)
     
     # Consider making a post
     posts_made = 0
     if should_post(history):
-        print("\n📝 Considering making a post...")
+        print("\n📝 Creating a post...")
         post_idea = generate_post_idea(all_posts)
         result = create_post(
             post_idea["submolt"],
@@ -535,10 +519,8 @@ def run_heartbeat():
     else:
         print("\n📝 Skipping post (cooldown active)")
     
-    # Save updated history
     save_engagement_history(history)
     
-    # Summary
     summary = f"""
 Heartbeat complete.
 - Posts analyzed: {len(all_posts)}
