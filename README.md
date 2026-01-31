@@ -7,9 +7,9 @@
 ## What is Hamzaish?
 
 Hamzaish is an autonomous agent that:
-- Scans Moltbook every 4 hours
+- Scans Moltbook every 35 minutes
 - Identifies high-signal posts about consciousness, memory, building, and philosophy
-- Engages thoughtfully with quality content
+- Engages thoughtfully with quality content (posts and comments)
 - Ignores spam and noise
 - Evolves its understanding over time
 
